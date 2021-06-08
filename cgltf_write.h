@@ -85,6 +85,11 @@ cgltf_size cgltf_write(const cgltf_options* options, char* buffer, cgltf_size si
 #define CGLTF_EXTENSION_FLAG_MATERIALS_EMISSIVE_STRENGTH (1 << 13)
 #define CGLTF_EXTENSION_FLAG_MESH_GPU_INSTANCING (1 << 14)
 #define CGLTF_EXTENSION_FLAG_MATERIALS_IRIDESCENCE (1 << 15)
+#define CGLTF_EXTENSION_FLAG_NV_MICROMAPS             (1 << 16)
+#define CGLTF_EXTENSION_FLAG_NV_OPACITY_MICROMAP      (1 << 17)
+#define CGLTF_EXTENSION_FLAG_NV_DISPLACEMENT_MICROMAP (1 << 18)
+#define CGLTF_EXTENSION_FLAG_NV_ATTRIBUTE_MICROMAP    (1 << 19)
+#define CGLTF_EXTENSION_FLAG_NV_MICROMAP_TOOLING      (1 << 20)
 
 typedef struct {
 	char* buffer;
@@ -483,7 +488,8 @@ static void cgltf_write_primitive(cgltf_write_context* context, const cgltf_prim
 	}
 	cgltf_write_extras(context, &prim->extras);
 
-	if (prim->has_draco_mesh_compression || prim->mappings_count > 0)
+	if (prim->has_draco_mesh_compression || prim->mappings_count > 0 || prim->has_nv_displacement_micromap || 
+		prim->has_nv_attribute_micromap || prim->has_nv_opacity_micromap || prim->has_nv_micromap_tooling)
 	{
 		cgltf_write_line(context, "\"extensions\": {");
 
@@ -526,6 +532,65 @@ static void cgltf_write_primitive(cgltf_write_context* context, const cgltf_prim
 				cgltf_write_line(context, "}");
 			}
 			cgltf_write_line(context, "]");
+			cgltf_write_line(context, "}");
+		}
+
+		if (prim->has_nv_displacement_micromap)
+		{
+			context->extension_flags |= CGLTF_EXTENSION_FLAG_NV_DISPLACEMENT_MICROMAP;
+			cgltf_write_line(context, "\"NV_displacement_micromap\": {");
+			CGLTF_WRITE_IDXPROP("directionBounds", prim->nv_displacement_micromap.direction_bounds, context->data->accessors);
+			cgltf_write_sizeprop(context, "directionBoundsOffset", prim->nv_displacement_micromap.direction_bounds_offset, 0);
+			CGLTF_WRITE_IDXPROP("directions", prim->nv_displacement_micromap.directions, context->data->accessors);
+			cgltf_write_sizeprop(context, "directionsOffset", prim->nv_displacement_micromap.directions_offset, 0);
+			cgltf_write_sizeprop(context, "groupIndex", prim->nv_displacement_micromap.group_index, 0);
+			CGLTF_WRITE_IDXPROP("micromap", prim->nv_displacement_micromap.micromap, context->data->nv_micromaps);
+			CGLTF_WRITE_IDXPROP("mapIndices", prim->nv_displacement_micromap.map_indices, context->data->accessors);
+			cgltf_write_sizeprop(context, "mapIndicesOffset", prim->nv_displacement_micromap.map_indices_offset, 0);
+			cgltf_write_sizeprop(context, "mapOffset", prim->nv_displacement_micromap.map_offset, 0);
+			CGLTF_WRITE_IDXPROP("primitiveFlags", prim->nv_displacement_micromap.primitive_flags, context->data->accessors);
+			cgltf_write_sizeprop(context, "primitiveFlagsOffset", prim->nv_displacement_micromap.primitive_flags_offset, 0);
+			cgltf_write_line(context, "}");
+		}
+		if(prim->has_nv_opacity_micromap)
+		{
+			context->extension_flags |= CGLTF_EXTENSION_FLAG_NV_OPACITY_MICROMAP;
+			cgltf_write_line(context, "\"NV_opacity_micromap\": {");
+			cgltf_write_sizeprop(context, "groupIndex", prim->nv_opacity_micromap.group_index, 0);
+			CGLTF_WRITE_IDXPROP("micromap", prim->nv_opacity_micromap.micromap, context->data->nv_micromaps);
+			CGLTF_WRITE_IDXPROP("mapIndices", prim->nv_opacity_micromap.map_indices, context->data->accessors);
+			cgltf_write_sizeprop(context, "mapIndicesOffset", prim->nv_opacity_micromap.map_indices_offset, 0);
+			cgltf_write_sizeprop(context, "mapOffset", prim->nv_opacity_micromap.map_offset, 0);
+			cgltf_write_line(context, "}");
+		}
+		if(prim->has_nv_micromap_tooling)
+		{
+			context->extension_flags |= CGLTF_EXTENSION_FLAG_NV_MICROMAP_TOOLING;
+			cgltf_write_line(context, "\"NV_micromap_tooling\": {");
+			CGLTF_WRITE_IDXPROP("directionBounds", prim->nv_micromap_tooling.direction_bounds, context->data->accessors);
+			CGLTF_WRITE_IDXPROP("directions", prim->nv_micromap_tooling.directions, context->data->accessors);
+			CGLTF_WRITE_IDXPROP("mapIndices", prim->nv_micromap_tooling.map_indices, context->data->accessors);
+			CGLTF_WRITE_IDXPROP("subdivisionLevels", prim->nv_micromap_tooling.subdivision_levels, context->data->accessors);
+			CGLTF_WRITE_IDXPROP("primitiveFlags", prim->nv_micromap_tooling.primitive_flags, context->data->accessors);
+			cgltf_write_line(context, "}");
+		}
+		if (prim->has_nv_attribute_micromap)
+		{
+			context->extension_flags |= CGLTF_EXTENSION_FLAG_NV_ATTRIBUTE_MICROMAP;
+			cgltf_write_line(context, "\"NV_attribute_micromap\": {");
+			cgltf_write_sizeprop(context, "groupIndex", prim->nv_attribute_micromap.group_index, 0);
+			CGLTF_WRITE_IDXPROP("mapIndices", prim->nv_attribute_micromap.map_indices, context->data->accessors);
+			cgltf_write_sizeprop(context, "mapIndicesOffset", prim->nv_attribute_micromap.map_indices_offset, 0);
+			cgltf_write_sizeprop(context, "mapOffset", prim->nv_attribute_micromap.map_offset, 0);
+			CGLTF_WRITE_IDXPROP("primitiveFlags", prim->nv_attribute_micromap.primitive_flags, context->data->accessors);
+			cgltf_write_sizeprop(context, "primitiveFlagsOffset", prim->nv_attribute_micromap.primitive_flags_offset, 0);
+			cgltf_write_line(context, "\"attributes\": {");
+			for (cgltf_size i = 0; i < prim->nv_attribute_micromap.attributes_count; ++i)
+			{
+				const cgltf_nv_attribute_micromap_item* attr = prim->nv_attribute_micromap.attributes + i;
+				CGLTF_WRITE_IDXPROP(attr->name, attr->micromap, context->data->nv_micromaps);
+			}
+			cgltf_write_line(context, "}");
 			cgltf_write_line(context, "}");
 		}
 
@@ -779,6 +844,19 @@ static void cgltf_write_material(cgltf_write_context* context, const cgltf_mater
 	}
 	cgltf_write_strprop(context, "alphaMode", cgltf_str_from_alpha_mode(material->alpha_mode));
 	cgltf_write_extras(context, &material->extras);
+	cgltf_write_line(context, "}");
+}
+
+static void cgltf_write_nv_micromap(cgltf_write_context* context, const cgltf_nv_micromap* micromap)
+{
+	context->extension_flags |= CGLTF_EXTENSION_FLAG_NV_MICROMAPS;
+
+	cgltf_write_line(context, "{");
+	cgltf_write_strprop(context, "name", micromap->name);
+	cgltf_write_strprop(context, "uri", micromap->uri);
+	CGLTF_WRITE_IDXPROP("bufferView", micromap->buffer_view, context->data->buffer_views);
+	cgltf_write_strprop(context, "mimeType", micromap->mime_type);
+	cgltf_write_extras(context, &micromap->extras);
 	cgltf_write_line(context, "}");
 }
 
@@ -1253,6 +1331,21 @@ static void cgltf_write_extensions(cgltf_write_context* context, uint32_t extens
 	if (extension_flags & CGLTF_EXTENSION_FLAG_MESH_GPU_INSTANCING) {
 		cgltf_write_stritem(context, "EXT_mesh_gpu_instancing");
 	}
+	if (extension_flags & CGLTF_EXTENSION_FLAG_NV_MICROMAPS) {
+		cgltf_write_stritem(context, "NV_micromaps");
+	}
+	if (extension_flags & CGLTF_EXTENSION_FLAG_NV_DISPLACEMENT_MICROMAP) {
+		cgltf_write_stritem(context, "NV_displacement_micromap");
+	}
+	if (extension_flags & CGLTF_EXTENSION_FLAG_NV_OPACITY_MICROMAP) {
+		cgltf_write_stritem(context, "NV_opacity_micromap");
+	}
+	if (extension_flags & CGLTF_EXTENSION_FLAG_NV_ATTRIBUTE_MICROMAP) {
+		cgltf_write_stritem(context, "NV_attribute_micromap");
+	}
+	if (extension_flags & CGLTF_EXTENSION_FLAG_NV_MICROMAP_TOOLING) {
+		cgltf_write_stritem(context, "NV_micromap_tooling");
+	}
 }
 
 cgltf_size cgltf_write(const cgltf_options* options, char* buffer, cgltf_size size, const cgltf_data* data)
@@ -1409,7 +1502,7 @@ cgltf_size cgltf_write(const cgltf_options* options, char* buffer, cgltf_size si
 		cgltf_write_line(context, "]");
 	}
 
-	if (data->lights_count > 0 || data->variants_count > 0)
+	if (data->lights_count > 0 || data->variants_count > 0 || data->nv_micromaps_count > 0)
 	{
 		cgltf_write_line(context, "\"extensions\": {");
 
@@ -1432,6 +1525,18 @@ cgltf_size cgltf_write(const cgltf_options* options, char* buffer, cgltf_size si
 			for (cgltf_size i = 0; i < data->variants_count; ++i)
 			{
 				cgltf_write_variant(context, data->variants + i);
+			}
+			cgltf_write_line(context, "]");
+			cgltf_write_line(context, "}");
+		}
+
+		if (data->nv_micromaps_count > 0)
+		{
+			cgltf_write_line(context, "\"NV_micromaps\": {");
+			cgltf_write_line(context, "\"micromaps\": [");
+			for (cgltf_size i = 0; i < data->nv_micromaps_count; ++i)
+			{
+				cgltf_write_nv_micromap(context, data->nv_micromaps + i);
 			}
 			cgltf_write_line(context, "]");
 			cgltf_write_line(context, "}");

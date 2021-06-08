@@ -6,7 +6,7 @@
  * Website: https://github.com/jkuhlmann/cgltf
  *
  * Distributed under the MIT License, see notice at the end of this file.
- *
+ * 
  * Building:
  * Include this file where you need the struct and function
  * declarations. Have exactly one source file where you define
@@ -123,7 +123,7 @@ typedef enum cgltf_result
 	cgltf_result_io_error,
 	cgltf_result_out_of_memory,
 	cgltf_result_legacy_gltf,
-    cgltf_result_max_enum
+	cgltf_result_max_enum
 } cgltf_result;
 
 typedef struct cgltf_memory_options
@@ -177,9 +177,10 @@ typedef enum cgltf_component_type
 	cgltf_component_type_r_8u, /* UNSIGNED_BYTE */
 	cgltf_component_type_r_16, /* SHORT */
 	cgltf_component_type_r_16u, /* UNSIGNED_SHORT */
+	cgltf_component_type_r_16f, /* HALF_FLOAT */
 	cgltf_component_type_r_32u, /* UNSIGNED_INT */
 	cgltf_component_type_r_32f, /* FLOAT */
-    cgltf_component_type_max_enum
+	cgltf_component_type_max_enum
 } cgltf_component_type;
 
 typedef enum cgltf_type
@@ -564,6 +565,71 @@ typedef struct cgltf_mesh_gpu_instancing {
 	cgltf_size attributes_count;
 } cgltf_mesh_gpu_instancing;
 
+typedef struct cgltf_nv_micromap {
+	char* name;
+	char* uri;
+	cgltf_buffer_view* buffer_view;
+	char* mime_type;
+	cgltf_extras extras;
+	cgltf_size extensions_count;
+	cgltf_extension* extensions;
+} cgltf_nv_micromap;
+
+typedef struct cgltf_nv_opacity_micromap
+{
+	cgltf_size group_index;
+	cgltf_nv_micromap* micromap;
+	cgltf_accessor* map_indices;
+	cgltf_size map_indices_offset;
+	cgltf_size map_offset;
+} cgltf_nv_opacity_micromap;
+
+typedef struct cgltf_nv_micromap_tooling
+{
+	cgltf_accessor* direction_bounds;
+	cgltf_accessor* directions;
+	cgltf_accessor* map_indices;
+	cgltf_accessor* subdivision_levels;
+	cgltf_accessor* primitive_flags;
+} cgltf_nv_micromap_tooling;
+
+typedef struct cgltf_nv_displacement_micromap
+{
+	cgltf_accessor* direction_bounds;
+	cgltf_size direction_bounds_offset;
+	cgltf_accessor* directions;
+	cgltf_size directions_offset;
+	cgltf_size group_index;
+	cgltf_image* image; // legacy
+	cgltf_nv_micromap* micromap;
+	cgltf_accessor* map_indices;
+	cgltf_size map_indices_offset;
+	cgltf_size map_offset;
+	cgltf_accessor* primitive_flags;
+	cgltf_size primitive_flags_offset;
+} cgltf_nv_displacement_micromap;
+
+typedef struct cgltf_nv_attribute_micromap_item
+{
+	char* name;
+	cgltf_attribute_type type;
+	cgltf_int index;
+	cgltf_nv_micromap* micromap;
+	cgltf_image* image; // legacy
+} cgltf_nv_attribute_micromap_item;
+
+typedef struct cgltf_nv_attribute_micromap
+{
+	cgltf_nv_attribute_micromap_item* attributes;
+	cgltf_size attributes_count;
+	cgltf_size group_index;
+	cgltf_accessor* map_indices;
+	cgltf_size map_indices_offset;
+	cgltf_size map_offset;
+	cgltf_accessor* primitive_flags;
+	cgltf_size primitive_flags_offset;
+} cgltf_nv_attribute_micromap;
+
 typedef struct cgltf_primitive {
 	cgltf_primitive_type type;
 	cgltf_accessor* indices;
@@ -575,6 +641,14 @@ typedef struct cgltf_primitive {
 	cgltf_extras extras;
 	cgltf_bool has_draco_mesh_compression;
 	cgltf_draco_mesh_compression draco_mesh_compression;
+	cgltf_bool has_nv_micromap_tooling;
+	cgltf_nv_micromap_tooling nv_micromap_tooling;
+	cgltf_bool has_nv_opacity_micromap;
+	cgltf_nv_opacity_micromap nv_opacity_micromap;
+	cgltf_bool has_nv_displacement_micromap;
+	cgltf_nv_displacement_micromap nv_displacement_micromap;
+	cgltf_bool has_nv_attribute_micromap;
+	cgltf_nv_attribute_micromap nv_attribute_micromap;
 	cgltf_material_mapping* mappings;
 	cgltf_size mappings_count;
 	cgltf_size extensions_count;
@@ -781,6 +855,9 @@ typedef struct cgltf_data
 
 	cgltf_material_variant* variants;
 	cgltf_size variants_count;
+
+	cgltf_nv_micromap* nv_micromaps;
+	cgltf_size nv_micromaps_count;
 
 	cgltf_extras extras;
 
@@ -1639,6 +1716,24 @@ cgltf_result cgltf_validate(cgltf_data* data)
 					}
 				}
 
+				if (data->meshes[i].primitives[j].has_nv_attribute_micromap)
+				{
+					for (cgltf_size k = 0; k < data->meshes[i].primitives[j].nv_attribute_micromap.attributes_count; ++k)
+					{
+						CGLTF_ASSERT_IF(data->meshes[i].primitives[j].nv_attribute_micromap.attributes[k].type == cgltf_attribute_type_position, cgltf_result_invalid_gltf);
+					}
+				}
+
+				if (data->meshes[i].primitives[j].has_nv_attribute_micromap && data->meshes[i].primitives[j].has_nv_displacement_micromap)
+				{
+					CGLTF_ASSERT_IF(data->meshes[i].primitives[j].nv_attribute_micromap.group_index != data->meshes[i].primitives[j].nv_displacement_micromap.group_index, cgltf_result_invalid_gltf);
+					CGLTF_ASSERT_IF(data->meshes[i].primitives[j].nv_attribute_micromap.map_offset != data->meshes[i].primitives[j].nv_displacement_micromap.map_offset, cgltf_result_invalid_gltf);
+					CGLTF_ASSERT_IF(data->meshes[i].primitives[j].nv_attribute_micromap.map_indices_offset != data->meshes[i].primitives[j].nv_displacement_micromap.map_indices_offset, cgltf_result_invalid_gltf);
+					CGLTF_ASSERT_IF(data->meshes[i].primitives[j].nv_attribute_micromap.map_indices != data->meshes[i].primitives[j].nv_displacement_micromap.map_indices, cgltf_result_invalid_gltf);
+					CGLTF_ASSERT_IF(data->meshes[i].primitives[j].nv_attribute_micromap.primitive_flags != data->meshes[i].primitives[j].nv_displacement_micromap.primitive_flags, cgltf_result_invalid_gltf);
+					CGLTF_ASSERT_IF(data->meshes[i].primitives[j].nv_attribute_micromap.primitive_flags_offset != data->meshes[i].primitives[j].nv_displacement_micromap.primitive_flags_offset, cgltf_result_invalid_gltf);
+				}
+
 				cgltf_accessor* indices = data->meshes[i].primitives[j].indices;
 
 				CGLTF_ASSERT_IF(indices &&
@@ -1834,6 +1929,7 @@ void cgltf_free(cgltf_data* data)
 	}
 	data->memory.free_func(data->memory.user_data, data->buffers);
 
+
 	for (cgltf_size i = 0; i < data->meshes_count; ++i)
 	{
 		data->memory.free_func(data->memory.user_data, data->meshes[i].name);
@@ -1872,6 +1968,16 @@ void cgltf_free(cgltf_data* data)
 			for (cgltf_size k = 0; k < data->meshes[i].primitives[j].mappings_count; ++k)
 			{
 				cgltf_free_extras(data, &data->meshes[i].primitives[j].mappings[k].extras);
+			}
+
+			if (data->meshes[i].primitives[j].has_nv_attribute_micromap)
+			{
+				for (cgltf_size k = 0; k < data->meshes[i].primitives[j].nv_attribute_micromap.attributes_count; ++k)
+				{
+					data->memory.free_func(data->memory.user_data, data->meshes[i].primitives[j].nv_attribute_micromap.attributes[k].name);
+				}
+
+				data->memory.free_func(data->memory.user_data, data->meshes[i].primitives[j].nv_attribute_micromap.attributes);
 			}
 
 			data->memory.free_func(data->memory.user_data, data->meshes[i].primitives[j].mappings);
@@ -1949,6 +2055,17 @@ void cgltf_free(cgltf_data* data)
 	}
 
 	data->memory.free_func(data->memory.user_data, data->materials);
+
+	for (cgltf_size i = 0; i < data->nv_micromaps_count; ++i) 
+	{
+		data->memory.free_func(data->memory.user_data, data->nv_micromaps[i].name);
+		data->memory.free_func(data->memory.user_data, data->nv_micromaps[i].uri);
+		data->memory.free_func(data->memory.user_data, data->nv_micromaps[i].mime_type);
+
+		cgltf_free_extensions(data, data->nv_micromaps[i].extensions, data->nv_micromaps[i].extensions_count);
+	}
+
+	data->memory.free_func(data->memory.user_data, data->nv_micromaps);
 
 	for (cgltf_size i = 0; i < data->images_count; ++i) 
 	{
@@ -2231,6 +2348,29 @@ static cgltf_float cgltf_component_read_float(const void* in, cgltf_component_ty
 	if (component_type == cgltf_component_type_r_32f)
 	{
 		return *((const float*) in);
+	}
+	else if (component_type == cgltf_component_type_r_16f)
+	{
+		// Based on half-to-float code by Fabian "ryg" Giesen, placed in the public domain:
+		// https://gist.github.com/rygorous/2144712
+		
+		typedef union FP32 {
+			uint32_t u;
+			float f;
+		} FP32;
+		
+		static const FP32 magic = { (254 - 15) << 23 };
+		static const FP32 was_infnan = { (127 + 16) << 23 };
+		
+		uint32_t value = *((uint16_t*) in);
+		FP32 o;
+		o.u = (value & 0x7fff) << 13; // exponent/mantissa bits
+		o.f *= magic.f; // exponent adjust
+		if (o.f >= was_infnan.f){ // make sure Inf/NaN survive
+			o.u |= 255 << 23;
+		}
+		o.u |= (value & 0x8000) << 16; // sign bit
+		return o.f;
 	}
 
 	if (normalized)
@@ -3037,6 +3177,380 @@ static int cgltf_parse_json_material_mappings(cgltf_options* options, jsmntok_t 
 	return i;
 }
 
+static int cgltf_parse_json_nv_displacement_micromap(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_nv_displacement_micromap* out_nv_displacement_micromap, cgltf_nv_micromap_tooling* out_nv_micromap_tooling)
+{
+	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
+
+	int size = tokens[i].size;
+	++i;
+
+	cgltf_bool is_legacy = out_nv_micromap_tooling != NULL;
+
+	// Default values
+	out_nv_displacement_micromap->direction_bounds_offset = 0;
+	out_nv_displacement_micromap->directions_offset = 0;
+	out_nv_displacement_micromap->group_index = 0;
+	out_nv_displacement_micromap->map_indices_offset = 0;
+	out_nv_displacement_micromap->map_offset = 0;
+	out_nv_displacement_micromap->primitive_flags_offset = 0;
+
+	for (int j = 0; j < size; ++j)
+	{
+		CGLTF_CHECK_KEY(tokens[i]);
+
+		if (cgltf_json_strcmp(tokens + i, json_chunk, "directionBounds") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->direction_bounds = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "directionBoundsOffset") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->direction_bounds_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "directions") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->directions = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "directionsOffset") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->directions_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "groupIndex") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->group_index = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mapIndices") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->map_indices = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if(cgltf_json_strcmp(tokens + i, json_chunk, "mapIndicesOffset") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->map_indices_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mapOffset") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->map_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if(cgltf_json_strcmp(tokens + i, json_chunk, "micromap") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->micromap = CGLTF_PTRINDEX(cgltf_nv_micromap, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "primitiveFlags") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->primitive_flags = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "primitiveFlagsOffset") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->primitive_flags_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "groupOffset") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->group_index = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "image") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->image = CGLTF_PTRINDEX(cgltf_image, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "subdivisionLevels") == 0)
+		{
+			++i;
+			out_nv_micromap_tooling->subdivision_levels = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "topologyFlags") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->primitive_flags = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "topologyFlagsOffset") == 0)
+		{
+			++i;
+			out_nv_displacement_micromap->primitive_flags_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else
+		{
+			i = cgltf_skip_json(tokens, i + 1);
+		}
+
+		if (i < 0)
+		{
+			return i;
+		}
+	}
+
+	return i;
+}
+
+static int cgltf_parse_json_nv_micromap_tooling(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_nv_micromap_tooling* out_nv_micromap_tooling)
+{
+	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
+
+	int size = tokens[i].size;
+	++i;
+
+	for (int j = 0; j < size; ++j)
+	{
+		CGLTF_CHECK_KEY(tokens[i]);
+
+		if (cgltf_json_strcmp(tokens + i, json_chunk, "directionBounds") == 0)
+		{
+			++i;
+			out_nv_micromap_tooling->direction_bounds = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "directions") == 0)
+		{
+			++i;
+			out_nv_micromap_tooling->directions = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mapIndices") == 0)
+		{
+			++i;
+			out_nv_micromap_tooling->map_indices = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "subdivisionLevels") == 0)
+		{
+			++i;
+			out_nv_micromap_tooling->subdivision_levels = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "primitiveFlags") == 0)
+		{
+			++i;
+			out_nv_micromap_tooling->primitive_flags = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else
+		{
+			i = cgltf_skip_json(tokens, i + 1);
+		}
+
+		if (i < 0)
+		{
+			return i;
+		}
+	}
+
+	return i;
+}
+
+static int cgltf_parse_json_nv_opacity_micromap(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_nv_opacity_micromap* out_nv_opacity_micromap)
+{
+	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
+
+	int size = tokens[i].size;
+	++i;
+
+	// Default values
+	out_nv_opacity_micromap->group_index = 0;
+	out_nv_opacity_micromap->map_indices_offset = 0;
+	out_nv_opacity_micromap->map_offset = 0;
+
+	for (int j = 0; j < size; ++j)
+	{
+		CGLTF_CHECK_KEY(tokens[i]);
+
+		if (cgltf_json_strcmp(tokens + i, json_chunk, "groupIndex") == 0)
+		{
+			++i;
+			out_nv_opacity_micromap->group_index = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mapIndices") == 0)
+		{
+			++i;
+			out_nv_opacity_micromap->map_indices = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if(cgltf_json_strcmp(tokens + i, json_chunk, "mapIndicesOffset") == 0)
+		{
+			++i;
+			out_nv_opacity_micromap->map_indices_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mapOffset") == 0)
+		{
+			++i;
+			out_nv_opacity_micromap->map_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if(cgltf_json_strcmp(tokens + i, json_chunk, "micromap") == 0)
+		{
+			++i;
+			out_nv_opacity_micromap->micromap = CGLTF_PTRINDEX(cgltf_nv_micromap, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else
+		{
+			i = cgltf_skip_json(tokens, i + 1);
+		}
+
+		if (i < 0)
+		{
+			return i;
+		}
+	}
+
+	return i;
+}
+
+static int cgltf_parse_json_attribute_micromap_list(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_nv_attribute_micromap_item** out_attributes, cgltf_size* out_attributes_count, cgltf_bool is_legacy)
+{
+	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
+
+	*out_attributes_count = tokens[i].size;
+	*out_attributes = (cgltf_nv_attribute_micromap_item*)cgltf_calloc(options, sizeof(cgltf_nv_attribute_micromap_item), *out_attributes_count);
+	++i;
+
+	if (!*out_attributes)
+	{
+		return CGLTF_ERROR_NOMEM;
+	}
+
+	for (cgltf_size j = 0; j < *out_attributes_count; ++j)
+	{
+		CGLTF_CHECK_KEY(tokens[i]);
+
+		i = cgltf_parse_json_string(options, tokens, i, json_chunk, &(*out_attributes)[j].name);
+		if (i < 0)
+		{
+			return CGLTF_ERROR_JSON;
+		}
+
+		cgltf_parse_attribute_type((*out_attributes)[j].name, &(*out_attributes)[j].type, &(*out_attributes)[j].index);
+
+		if (is_legacy)
+		{
+			(*out_attributes)[j].image = CGLTF_PTRINDEX(cgltf_image, cgltf_json_to_int(tokens + i, json_chunk));
+		}
+		else
+		{
+			(*out_attributes)[j].micromap = CGLTF_PTRINDEX(cgltf_nv_micromap, cgltf_json_to_int(tokens + i, json_chunk));
+		}
+		++i;
+	}
+
+	return i;
+}
+
+static int cgltf_parse_json_nv_attribute_micromap(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_nv_attribute_micromap* out_nv_attribute_micromaps, cgltf_bool is_legacy)
+{
+	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
+
+	int size = tokens[i].size;
+	++i;
+
+	out_nv_attribute_micromaps->attributes_count = 0;
+	out_nv_attribute_micromaps->attributes = 0;
+	out_nv_attribute_micromaps->group_index = 0;
+	out_nv_attribute_micromaps->map_indices = 0;
+	out_nv_attribute_micromaps->map_indices_offset = 0;
+	out_nv_attribute_micromaps->map_offset = 0;
+	out_nv_attribute_micromaps->primitive_flags = 0;
+	out_nv_attribute_micromaps->primitive_flags_offset = 0;
+
+	for (int j = 0; j < size; ++j){
+		if (cgltf_json_strcmp(tokens+i, json_chunk, "attributes") == 0)
+		{
+			i = cgltf_parse_json_attribute_micromap_list(options, tokens, i + 1, json_chunk, &out_nv_attribute_micromaps->attributes, &out_nv_attribute_micromaps->attributes_count, is_legacy);
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "groupIndex") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->group_index = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mapIndices") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->map_indices = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if(cgltf_json_strcmp(tokens + i, json_chunk, "mapIndicesOffset") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->map_indices_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mapOffset") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->map_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "primitiveFlags") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->primitive_flags = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "primitiveFlagsOffset") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->primitive_flags_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "groupOffset") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->group_index = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "topologyFlags") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->primitive_flags = CGLTF_PTRINDEX(cgltf_accessor, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (is_legacy && cgltf_json_strcmp(tokens + i, json_chunk, "topologyFlagsOffset") == 0)
+		{
+			++i;
+			out_nv_attribute_micromaps->primitive_flags_offset = cgltf_json_to_size(tokens + i, json_chunk);
+			++i;
+		}
+		else
+		{
+			i = cgltf_skip_json(tokens, i + 1);
+		}
+
+		if (i < 0)
+		{
+			return i;
+		}
+	}
+
+	return i;
+}
+
 static int cgltf_parse_json_primitive(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_primitive* out_prim)
 {
 	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
@@ -3127,6 +3641,40 @@ static int cgltf_parse_json_primitive(cgltf_options* options, jsmntok_t const* t
 				else if (cgltf_json_strcmp(tokens+i, json_chunk, "KHR_materials_variants") == 0)
 				{
 					i = cgltf_parse_json_material_mappings(options, tokens, i + 1, json_chunk, out_prim);
+				}
+				else if (cgltf_json_strcmp(tokens+i, json_chunk, "NV_displacement_micromap") == 0 || cgltf_json_strcmp(tokens + i, json_chunk, "NV_barycentric_displacement") == 0)
+				{
+					cgltf_bool is_legacy = cgltf_json_strcmp(tokens + i, json_chunk, "NV_barycentric_displacement") == 0;
+
+					out_prim->has_nv_displacement_micromap = 1;
+					i = cgltf_parse_json_nv_displacement_micromap(options, tokens, i + 1, json_chunk, &out_prim->nv_displacement_micromap, is_legacy ? &out_prim->nv_micromap_tooling : NULL);
+					
+					// legacy
+					if (is_legacy)
+					{
+						out_prim->has_nv_micromap_tooling = 1;
+						out_prim->nv_micromap_tooling.direction_bounds = out_prim->nv_displacement_micromap.direction_bounds;
+						out_prim->nv_micromap_tooling.directions = out_prim->nv_displacement_micromap.directions;
+						out_prim->nv_micromap_tooling.map_indices = out_prim->nv_displacement_micromap.map_indices;
+						out_prim->nv_micromap_tooling.primitive_flags = out_prim->nv_displacement_micromap.primitive_flags;
+					}
+				}
+				else if(cgltf_json_strcmp(tokens + i, json_chunk, "NV_attribute_micromap") == 0 || cgltf_json_strcmp(tokens + i, json_chunk, "NV_barycentric_attributes") == 0)
+				{
+					cgltf_bool is_legacy = cgltf_json_strcmp(tokens + i, json_chunk, "NV_barycentric_attributes") == 0;
+
+					out_prim->has_nv_attribute_micromap = 1;
+					i = cgltf_parse_json_nv_attribute_micromap(options, tokens, i + 1, json_chunk, &out_prim->nv_attribute_micromap, is_legacy);
+				}
+				else if(cgltf_json_strcmp(tokens + i, json_chunk, "NV_opacity_micromap") == 0)
+				{
+					out_prim->has_nv_opacity_micromap = 1;
+					i = cgltf_parse_json_nv_opacity_micromap(options, tokens, i + 1, json_chunk, &out_prim->nv_opacity_micromap);
+				}
+				else if(cgltf_json_strcmp(tokens + i, json_chunk, "NV_micromap_tooling") == 0)
+				{
+					out_prim->has_nv_micromap_tooling = 1;
+					i = cgltf_parse_json_nv_micromap_tooling(options, tokens, i + 1, json_chunk, &out_prim->nv_micromap_tooling);
 				}
 				else
 				{
@@ -3286,6 +3834,8 @@ static cgltf_component_type cgltf_json_to_component_type(jsmntok_t const* tok, c
 		return cgltf_component_type_r_32u;
 	case 5126:
 		return cgltf_component_type_r_32f;
+	case 5131:
+		return cgltf_component_type_r_16f;
 	default:
 		return cgltf_component_type_invalid;
 	}
@@ -4128,6 +4678,57 @@ static int cgltf_parse_json_iridescence(cgltf_options* options, jsmntok_t const*
 	return i;
 }
 
+static int cgltf_parse_json_nv_micromap(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_nv_micromap* out_micromap)
+{
+	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
+
+	int size = tokens[i].size;
+	++i;
+
+	for (int j = 0; j < size; ++j) 
+	{
+		CGLTF_CHECK_KEY(tokens[i]);
+
+		if (cgltf_json_strcmp(tokens + i, json_chunk, "uri") == 0) 
+		{
+			i = cgltf_parse_json_string(options, tokens, i + 1, json_chunk, &out_micromap->uri);
+		}
+		else if (cgltf_json_strcmp(tokens+i, json_chunk, "bufferView") == 0)
+		{
+			++i;
+			out_micromap->buffer_view = CGLTF_PTRINDEX(cgltf_buffer_view, cgltf_json_to_int(tokens + i, json_chunk));
+			++i;
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "mimeType") == 0)
+		{
+			i = cgltf_parse_json_string(options, tokens, i + 1, json_chunk, &out_micromap->mime_type);
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "name") == 0)
+		{
+			i = cgltf_parse_json_string(options, tokens, i + 1, json_chunk, &out_micromap->name);
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "extras") == 0)
+		{
+			i = cgltf_parse_json_extras(options, tokens, i + 1, json_chunk, &out_micromap->extras);
+		}
+		else if (cgltf_json_strcmp(tokens + i, json_chunk, "extensions") == 0)
+		{
+			i = cgltf_parse_json_unprocessed_extensions(options, tokens, i, json_chunk, &out_micromap->extensions_count, &out_micromap->extensions);
+		}
+		else
+		{
+			i = cgltf_skip_json(tokens, i + 1);
+		}
+
+		if (i < 0)
+		{
+			return i;
+		}
+	}
+
+	return i;
+}
+
 static int cgltf_parse_json_image(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_image* out_image)
 {
 	CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
@@ -4571,6 +5172,25 @@ static int cgltf_parse_json_materials(cgltf_options* options, jsmntok_t const* t
 	for (cgltf_size j = 0; j < out_data->materials_count; ++j)
 	{
 		i = cgltf_parse_json_material(options, tokens, i, json_chunk, &out_data->materials[j]);
+		if (i < 0)
+		{
+			return i;
+		}
+	}
+	return i;
+}
+
+static int cgltf_parse_json_nv_micromaps(cgltf_options* options, jsmntok_t const* tokens, int i, const uint8_t* json_chunk, cgltf_data* out_data)
+{
+	i = cgltf_parse_json_array(options, tokens, i, json_chunk, sizeof(cgltf_nv_micromap), (void**)&out_data->nv_micromaps, &out_data->nv_micromaps_count);
+	if (i < 0)
+	{
+		return i;
+	}
+
+	for (cgltf_size j = 0; j < out_data->nv_micromaps_count; ++j)
+	{
+		i = cgltf_parse_json_nv_micromap(options, tokens, i, json_chunk, &out_data->nv_micromaps[j]);
 		if (i < 0)
 		{
 			return i;
@@ -5972,6 +6592,7 @@ cgltf_size cgltf_component_size(cgltf_component_type component_type) {
 		return 1;
 	case cgltf_component_type_r_16:
 	case cgltf_component_type_r_16u:
+	case cgltf_component_type_r_16f:
 		return 2;
 	case cgltf_component_type_r_32u:
 	case cgltf_component_type_r_32f:
@@ -6156,6 +6777,34 @@ static int cgltf_parse_json_root(cgltf_options* options, jsmntok_t const* tokens
 						}
 					}
 				}
+				else if (cgltf_json_strcmp(tokens+i, json_chunk, "NV_micromaps") == 0)
+				{
+					++i;
+
+					CGLTF_CHECK_TOKTYPE(tokens[i], JSMN_OBJECT);
+
+					int data_size = tokens[i].size;
+					++i;
+
+					for (int m = 0; m < data_size; ++m)
+					{
+						CGLTF_CHECK_KEY(tokens[i]);
+
+						if (cgltf_json_strcmp(tokens + i, json_chunk, "micromaps") == 0)
+						{
+							i = cgltf_parse_json_nv_micromaps(options, tokens, i + 1, json_chunk, out_data);
+						}
+						else
+						{
+							i = cgltf_skip_json(tokens, i + 1);
+						}
+
+						if (i < 0)
+						{
+							return i;
+						}
+					}
+				}
 				else
 				{
 					i = cgltf_parse_json_unprocessed_extension(options, tokens, i, json_chunk, &(out_data->data_extensions[out_data->data_extensions_count++]));
@@ -6302,6 +6951,39 @@ static int cgltf_fixup_pointers(cgltf_data* data)
 			for (cgltf_size k = 0; k < data->meshes[i].primitives[j].mappings_count; ++k)
 			{
 				CGLTF_PTRFIXUP_REQ(data->meshes[i].primitives[j].mappings[k].material, data->materials, data->materials_count);
+			}
+
+			if (data->meshes[i].primitives[j].has_nv_displacement_micromap)
+			{
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_displacement_micromap.direction_bounds, data->accessors, data->accessors_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_displacement_micromap.directions, data->accessors, data->accessors_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_displacement_micromap.image, data->images, data->images_count); // legacy
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_displacement_micromap.micromap, data->nv_micromaps, data->nv_micromaps_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_displacement_micromap.map_indices, data->accessors, data->accessors_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_displacement_micromap.primitive_flags, data->accessors, data->accessors_count);
+			}
+			if (data->meshes[i].primitives[j].has_nv_attribute_micromap)
+			{
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_attribute_micromap.map_indices, data->accessors, data->accessors_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_attribute_micromap.primitive_flags, data->accessors, data->accessors_count);
+				for (cgltf_size k = 0; k < data->meshes[i].primitives[j].nv_attribute_micromap.attributes_count; ++k)
+				{
+					CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_attribute_micromap.attributes[k].image, data->images, data->images_count); // legacy
+					CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_attribute_micromap.attributes[k].micromap, data->nv_micromaps, data->nv_micromaps_count);
+				}
+			}
+			if (data->meshes[i].primitives[j].has_nv_opacity_micromap)
+			{
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_opacity_micromap.micromap, data->nv_micromaps, data->nv_micromaps_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_opacity_micromap.map_indices, data->accessors, data->accessors_count);
+			}
+			if (data->meshes[i].primitives[j].has_nv_micromap_tooling)
+			{
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_micromap_tooling.direction_bounds, data->accessors, data->accessors_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_micromap_tooling.directions, data->accessors, data->accessors_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_micromap_tooling.map_indices, data->accessors, data->accessors_count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_micromap_tooling.subdivision_levels, data->accessors, data->accessors->count);
+				CGLTF_PTRFIXUP(data->meshes[i].primitives[j].nv_micromap_tooling.primitive_flags, data->accessors, data->accessors_count);
 			}
 		}
 	}
